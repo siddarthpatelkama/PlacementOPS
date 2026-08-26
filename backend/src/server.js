@@ -50,6 +50,6 @@ app.use((err, req, res, next) => {
 });
 
 // Start listening for connections
-app.listen(PORT, () => {
-  console.log(`PlacementOps server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });

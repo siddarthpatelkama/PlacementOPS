@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "PlacementOps — AI Placement Agent",
-  description: "Autonomous AI-powered placement tracking agent. Monitors college inbox, matches JDs against your resume, and drafts tailored cover letters.",
+  description: "Autonomous AI-powered placement tracking. Monitors your inbox, matches JDs against your resume, and drafts tailored cover letters.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -22,8 +22,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-[#070709] text-gray-100">{children}</body>
+      <body className="min-h-full flex flex-col bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 transition-colors duration-300">
+        {children}
+      </body>
     </html>
   );
 }

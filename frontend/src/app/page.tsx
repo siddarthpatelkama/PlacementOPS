@@ -20,7 +20,11 @@ import {
   Sparkles,
   Search,
   Check,
-  Award
+  Award,
+  Sun,
+  Moon,
+  ArrowUpRight,
+  X
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
@@ -52,16 +56,38 @@ export default function Home() {
   const [copiedText, setCopiedText] = useState(false);
   const [messageAlert, setMessageAlert] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  // Theme
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('placementops-theme');
+    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setIsDark(true);
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('placementops-theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('placementops-theme', 'light');
+    }
+  };
+
   // Parse URL query parameters for Gmail connection callbacks
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('gmail_connected') === 'true') {
-        showAlert('success', 'Gmail account connected successfully! Background monitoring is active.');
-        // Clean url query parameters
+        showAlert('success', 'Gmail connected successfully. Background monitoring is now active.');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else if (urlParams.get('gmail_error') === 'true') {
-        showAlert('error', 'Failed to authorize Gmail account. Please try again.');
+        showAlert('error', 'Gmail authorization failed. Please try again.');
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
@@ -95,7 +121,6 @@ export default function Home() {
     setTimeout(() => setMessageAlert(null), 5000);
   };
 
-  // Auth: Email/Password login or registration
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
@@ -110,17 +135,16 @@ export default function Home() {
       if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setAuthMessage('Registration successful! Please check your email to confirm your account (or log in directly if auto-confirmed).');
+        setAuthMessage('Account created. Check your email to confirm, or sign in directly.');
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
     } catch (err: any) {
-      setAuthError(err.message || 'An error occurred during authentication.');
+      setAuthError(err.message || 'Authentication failed.');
     }
   };
 
-  // Auth: Sign out
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -130,11 +154,9 @@ export default function Home() {
     setGmailConnected(false);
   };
 
-  // Dashboard API: Fetch student profile (resume text and CGPA)
   const fetchStudentProfile = async () => {
     if (!session?.user) return;
     try {
-      // Direct query public.users table to see if gmail refresh token is present
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
       
@@ -148,7 +170,6 @@ export default function Home() {
         setGmailConnected(true);
       }
 
-      // Query student profiles
       const { data: profile, error: profileError } = await supabase
         .from('student_profiles')
         .select('cgpa, raw_resume_text')
@@ -168,7 +189,6 @@ export default function Home() {
     }
   };
 
-  // Dashboard API: Fetch job matches from backend
   const fetchJobMatches = async () => {
     if (!session?.user) return;
     setIsLoadingJobs(true);
@@ -177,7 +197,6 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setMatchedJobs(data.matches || []);
-        // Maintain selection if already selected
         if (selectedJob) {
           const updatedSelected = data.matches.find((m: any) => m.job_id === selectedJob.job_id);
           if (updatedSelected) setSelectedJob(updatedSelected);
@@ -190,7 +209,6 @@ export default function Home() {
     }
   };
 
-  // Dashboard API: Upload resume text & CGPA to backend for vectorization
   const handleUploadResume = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session?.user || !resumeText) {
@@ -214,8 +232,8 @@ export default function Home() {
       if (data.success) {
         setHasResume(true);
         setCurrentCgpa(cgpa ? parseFloat(cgpa) : null);
-        showAlert('success', 'Resume parsed and vectorized successfully!');
-        fetchJobMatches(); // Re-trigger match evaluations
+        showAlert('success', 'Resume parsed and vectorized successfully.');
+        fetchJobMatches();
       } else {
         showAlert('error', data.error || 'Failed to process resume.');
       }
@@ -227,7 +245,6 @@ export default function Home() {
     }
   };
 
-  // Dashboard API: Trigger Gmail email polling manually
   const handleSyncGmail = async () => {
     if (!session?.user) return;
     if (!gmailConnected) {
@@ -246,7 +263,7 @@ export default function Home() {
       if (data.success) {
         const syncResult = data.results?.find((r: any) => r.user === session.user.email);
         const count = syncResult?.synced_jobs || 0;
-        showAlert('success', `Gmail sync complete! Discovered and analyzed ${count} new role(s).`);
+        showAlert('success', `Gmail sync complete. ${count} new role(s) discovered.`);
         fetchJobMatches();
       } else {
         showAlert('error', data.error || 'Failed to sync Gmail.');
@@ -259,294 +276,276 @@ export default function Home() {
     }
   };
 
-  // Copy cover letter to clipboard
   const handleCopyCoverLetter = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(true);
     setTimeout(() => setCopiedText(false), 2000);
   };
 
-  // Triggers OAuth redirection to Google consent screen
   const handleConnectGmail = () => {
     if (!session?.user) return;
     window.location.href = `${BACKEND_URL}/api/auth/google?userId=${session.user.id}`;
   };
 
-  // Color mappings for match scores
   const getMatchScoreBadge = (score: number) => {
     if (score >= 80) {
       return (
-        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5">
-          <Award className="w-3.5 h-3.5" /> High Match ({score}%)
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          {score}%
         </span>
       );
     } else if (score >= 50) {
       return (
-        <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5" /> Medium Match ({score}%)
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          {score}%
         </span>
       );
     } else {
       return (
-        <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5" /> Low Match ({score}%)
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-200 dark:border-red-500/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          {score}%
         </span>
       );
     }
   };
 
+  /* ─── LOADING SCREEN ─── */
   if (loadingSession) {
     return (
-      <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col justify-center items-center gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-        <p className="text-gray-400 text-sm font-medium tracking-wide">Syncing Session...</p>
+      <div className="min-h-screen flex flex-col justify-center items-center gap-4 bg-white dark:bg-neutral-950">
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-400" />
+        <p className="text-neutral-400 text-sm tracking-wide">Loading...</p>
       </div>
     );
   }
 
+  /* ─── MAIN RENDER ─── */
   return (
-    <div className="min-h-screen bg-[#070709] text-gray-100 flex flex-col selection:bg-indigo-500/30 selection:text-indigo-200">
-      
-      {/* Alert Banners */}
+    <div className="min-h-screen flex flex-col bg-neutral-50 dark:bg-neutral-950 transition-colors duration-300">
+
+      {/* ─── ALERT TOAST ─── */}
       {messageAlert && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl border ${
-          messageAlert.type === 'success' 
-            ? 'bg-emerald-950/80 border-emerald-500/30 text-emerald-200' 
-            : 'bg-rose-950/80 border-rose-500/30 text-rose-200'
-        } backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4`}>
-          {messageAlert.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <AlertTriangle className="w-5 h-5 text-rose-400" />}
+        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-slide-down ${
+          messageAlert.type === 'success'
+            ? 'bg-white dark:bg-neutral-900 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+            : 'bg-white dark:bg-neutral-900 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+        }`}>
+          {messageAlert.type === 'success'
+            ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+            : <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          }
           <span className="text-sm font-medium">{messageAlert.text}</span>
+          <button onClick={() => setMessageAlert(null)} className="ml-2 p-0.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+            <X className="w-3.5 h-3.5 text-neutral-400" />
+          </button>
         </div>
       )}
 
-      {/* HEADER */}
-      <header className="sticky top-0 z-40 bg-[#070709]/80 border-b border-gray-800/40 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+      {/* ─── HEADER ─── */}
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-neutral-950/80 backdrop-blur-xl border-b border-neutral-200/60 dark:border-neutral-800/60 px-6 lg:px-10 py-4 flex items-center justify-between transition-colors duration-300">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-xl shadow-lg shadow-indigo-500/10">
-            <Briefcase className="w-6 h-6 text-white" />
+          <div className="w-8 h-8 bg-neutral-900 dark:bg-white rounded-lg flex items-center justify-center transition-colors duration-300">
+            <Briefcase className="w-4 h-4 text-white dark:text-neutral-900" />
           </div>
           <div>
-            <h1 className="text-lg font-bold bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-              PlacementOps
-            </h1>
-            <p className="text-[10px] text-gray-500 font-medium tracking-widest uppercase">Autonomous Placement Agent</p>
+            <h1 className="text-base font-bold tracking-tight text-neutral-900 dark:text-white">PlacementOps</h1>
+            <p className="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Autonomous Agent</p>
           </div>
         </div>
-        
-        {session?.user && (
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-900/60 border border-gray-800/50 rounded-lg">
-              <User className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs text-gray-300 font-medium max-w-[200px] truncate">{session.user.email}</span>
-            </div>
-            <button 
-              onClick={handleSignOut}
-              className="flex items-center gap-2 px-3 py-2 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-900/50 text-red-400 rounded-lg text-xs font-semibold transition-all duration-200"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </button>
-          </div>
-        )}
+
+        <div className="flex items-center gap-3">
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all duration-200 shadow-sm"
+            aria-label="Toggle theme"
+          >
+            {isDark
+              ? <Sun className="w-4 h-4 text-amber-500" />
+              : <Moon className="w-4 h-4 text-neutral-500" />
+            }
+          </button>
+
+          {session?.user && (
+            <>
+              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl transition-colors">
+                <User className="w-3.5 h-3.5 text-neutral-500" />
+                <span className="text-xs text-neutral-600 dark:text-neutral-300 font-medium max-w-[180px] truncate">{session.user.email}</span>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-neutral-500 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/40 transition-all duration-200"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
-      {/* LANDING PAGE (LOGGED OUT) */}
+      {/* ─── LANDING PAGE (LOGGED OUT) ─── */}
       {!session ? (
-        <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 md:py-20 relative overflow-hidden">
-          {/* Background Ambient Glows */}
-          <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -z-10 pointer-events-none" />
-          <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl -z-10 pointer-events-none" />
-          
-          <div className="max-w-6xl w-full grid md:grid-cols-12 gap-12 md:gap-16 items-center">
-            
-            {/* Left Column: Copy & Value Prop */}
-            <div className="md:col-span-7 flex flex-col gap-6 text-left">
-              <span className="self-start px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-xs font-semibold text-indigo-400 tracking-wide">
-                🔥 AI-Powered Career Autopilot
+        <main className="flex-1 flex flex-col items-center justify-center px-6 py-16 md:py-24">
+          <div className="max-w-5xl w-full grid md:grid-cols-12 gap-12 md:gap-20 items-center">
+
+            {/* Left: Hero Copy */}
+            <div className="md:col-span-7 flex flex-col gap-6 animate-fade-up">
+              <span className="self-start px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 tracking-wide transition-colors">
+                AI-Powered Placement Agent
               </span>
-              <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.1] text-white">
-                Never Miss a <br />
-                <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Placement Offer.
-                </span>
+
+              <h2 className="text-4xl sm:text-5xl md:text-[3.5rem] font-black tracking-tight leading-[1.08] text-neutral-900 dark:text-white">
+                Never miss a{' '}
+                <span className="text-neutral-400 dark:text-neutral-500">placement offer.</span>
               </h2>
-              <p className="text-gray-400 text-base md:text-lg leading-relaxed max-w-xl">
-                PlacementOps runs autonomously in the background. It monitors your college inbox, extracts recruiter emails, matches JD criteria against your vector-embedded resume, checks your CGPA eligibility, and drafts tailored cover letters on the fly.
+
+              <p className="text-neutral-500 dark:text-neutral-400 text-base md:text-lg leading-relaxed max-w-lg">
+                PlacementOps monitors your inbox, extracts recruiter emails, matches JD criteria against your resume, and drafts tailored cover letters — autonomously.
               </p>
-              
-              {/* Feature grid */}
-              <div className="grid sm:grid-cols-2 gap-4 mt-4">
-                <div className="flex gap-3 items-start">
-                  <div className="mt-1 p-1 bg-indigo-500/10 border border-indigo-500/20 rounded-md">
-                    <Mail className="w-4 h-4 text-indigo-400" />
+
+              {/* Feature Grid */}
+              <div className="grid sm:grid-cols-2 gap-4 mt-2 stagger">
+                {[
+                  { icon: Mail, title: 'Gmail Monitoring', desc: 'Autonomous email polling and alerts' },
+                  { icon: FileText, title: 'Vector Resume', desc: 'Parsed and stored as embeddings' },
+                  { icon: Sparkles, title: 'Match Scoring', desc: 'Cosine similarity + CGPA checks' },
+                  { icon: BookOpen, title: 'Cover Letters', desc: 'AI-generated, gap-aware materials' },
+                ].map(({ icon: Icon, title, desc }) => (
+                  <div key={title} className="flex gap-3 items-start p-3 rounded-xl animate-fade-up">
+                    <div className="mt-0.5 p-2 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors">
+                      <Icon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{title}</h4>
+                      <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">{desc}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-200">Gmail Monitoring</h4>
-                    <p className="text-xs text-gray-500">Autonomous email polling and keyword alerts.</p>
-                  </div>
-                </div>
-                <div className="flex gap-3 items-start">
-                  <div className="mt-1 p-1 bg-purple-500/10 border border-purple-500/20 rounded-md">
-                    <FileText className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-200">RAG Vector Hub</h4>
-                    <p className="text-xs text-gray-500">Resume parsed and stored as high-dimensional vectors.</p>
-                  </div>
-                </div>
-                <div className="flex gap-3 items-start">
-                  <div className="mt-1 p-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-200">Match Scores</h4>
-                    <p className="text-xs text-gray-500">Cosine similarity matching with hard CGPA thresholds.</p>
-                  </div>
-                </div>
-                <div className="flex gap-3 items-start">
-                  <div className="mt-1 p-1 bg-pink-500/10 border border-pink-500/20 rounded-md">
-                    <BookOpen className="w-4 h-4 text-pink-400" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-200">Tailored Cover Letters</h4>
-                    <p className="text-xs text-gray-500">AI-generated materials bridging your specific skill gaps.</p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Right Column: Authentication Card */}
-            <div className="md:col-span-5">
-              <div className="bg-gray-900/40 border border-gray-800/80 rounded-2xl p-8 backdrop-blur-lg shadow-2xl relative">
-                <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-4 w-12 h-12 bg-indigo-500/10 rounded-full blur-xl" />
-                
-                <h3 className="text-xl font-bold text-white mb-2">
-                  {isSignUp ? 'Create your Account' : 'Welcome Back'}
+            {/* Right: Auth Card */}
+            <div className="md:col-span-5 animate-fade-up" style={{ animationDelay: '150ms' }}>
+              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-8 shadow-sm dark:shadow-none transition-colors duration-300">
+                <h3 className="text-xl font-bold text-neutral-900 dark:text-white tracking-tight">
+                  {isSignUp ? 'Create Account' : 'Welcome Back'}
                 </h3>
-                <p className="text-xs text-gray-500 mb-6">
-                  {isSignUp ? 'Get started with autonomous placement tracking' : 'Enter credentials to access your agent dashboard'}
+                <p className="text-sm text-neutral-400 dark:text-neutral-500 mt-1 mb-6">
+                  {isSignUp ? 'Start tracking placements autonomously' : 'Sign in to your dashboard'}
                 </p>
 
                 <form onSubmit={handleAuth} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Email Address</label>
-                    <input 
-                      type="email" 
+                    <label className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">Email</label>
+                    <input
+                      type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@college.edu"
-                      className="w-full bg-gray-950 border border-gray-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none transition-all duration-200"
+                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-4 py-3 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 transition-all duration-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Password</label>
-                    <input 
-                      type="password" 
+                    <label className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">Password</label>
+                    <input
+                      type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-gray-950 border border-gray-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none transition-all duration-200"
+                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-4 py-3 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 transition-all duration-200"
                     />
                   </div>
 
                   {authError && (
-                    <div className="p-3 bg-red-950/30 border border-red-900/30 rounded-lg text-xs font-medium text-red-400 flex items-center gap-2">
+                    <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-xl text-xs font-medium text-red-700 dark:text-red-400">
                       <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                       <span>{authError}</span>
                     </div>
                   )}
 
                   {authMessage && (
-                    <div className="p-3 bg-emerald-950/30 border border-emerald-900/30 rounded-lg text-xs font-medium text-emerald-400 flex items-center gap-2">
+                    <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30 rounded-xl text-xs font-medium text-emerald-700 dark:text-emerald-400">
                       <CheckCircle className="w-4 h-4 flex-shrink-0" />
                       <span>{authMessage}</span>
                     </div>
                   )}
 
-                  <button 
+                  <button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold py-2.5 rounded-lg text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transform active:scale-[0.98] transition-all duration-200"
+                    className="w-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-semibold py-3 rounded-xl text-sm hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all duration-200 shadow-sm"
                   >
-                    {isSignUp ? 'Sign Up' : 'Sign In'}
+                    {isSignUp ? 'Create Account' : 'Sign In'}
                   </button>
                 </form>
 
-                <div className="relative flex py-5 items-center">
-                  <div className="flex-grow border-t border-gray-800/60"></div>
-                  <span className="flex-shrink mx-4 text-gray-600 text-xs">or</span>
-                  <div className="flex-grow border-t border-gray-800/60"></div>
+                <div className="flex items-center gap-4 my-5">
+                  <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
+                  <span className="text-xs text-neutral-400">or</span>
+                  <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
                 </div>
 
-                <button 
-                  onClick={() => {
-                    setAuthError('');
-                    setAuthMessage('');
-                    setIsSignUp(!isSignUp);
-                  }}
-                  className="w-full bg-transparent hover:bg-gray-800/40 border border-gray-800 hover:border-gray-700 text-gray-400 hover:text-white font-medium py-2 rounded-lg text-sm transition-all duration-200"
+                <button
+                  onClick={() => { setAuthError(''); setAuthMessage(''); setIsSignUp(!isSignUp); }}
+                  className="w-full bg-transparent hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white font-medium py-2.5 rounded-xl text-sm transition-all duration-200"
                 >
                   {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
                 </button>
               </div>
             </div>
-            
+
           </div>
         </main>
       ) : (
-        /* AGENT DASHBOARD (LOGGED IN) */
-        <main className="flex-1 max-w-7xl w-full mx-auto p-6 grid md:grid-cols-12 gap-8 overflow-y-auto">
-          
-          {/* LEFT SIDEBAR: PROFILE & CONFIG (4 Columns) */}
+        /* ─── DASHBOARD (LOGGED IN) ─── */
+        <main className="flex-1 max-w-7xl w-full mx-auto p-6 lg:p-10 grid md:grid-cols-12 gap-6 lg:gap-8 overflow-y-auto">
+
+          {/* ─── LEFT SIDEBAR ─── */}
           <section className="md:col-span-4 flex flex-col gap-6">
-            
-            {/* Gmail Connection Status Card */}
-            <div className="bg-gray-900/30 border border-gray-800/50 rounded-xl p-5 backdrop-blur-sm">
-              <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-4">
-                <Mail className="w-4 h-4 text-indigo-400" />
-                Gmail Monitoring Service
+
+            {/* Gmail Card */}
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-sm dark:shadow-none transition-colors animate-fade-up">
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2 mb-4 tracking-tight">
+                <Mail className="w-4 h-4 text-neutral-400" />
+                Gmail Monitoring
               </h3>
-              
+
               {gmailConnected ? (
                 <div className="space-y-4">
-                  <div className="p-3 bg-emerald-500/5 border border-emerald-500/25 rounded-lg flex items-center gap-3">
-                    <UserCheck className="w-5 h-5 text-emerald-400" />
+                  <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl">
+                    <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                     <div>
-                      <h4 className="text-xs font-semibold text-emerald-400">Connection Connected</h4>
-                      <p className="text-[10px] text-gray-500">Autonomous polling for hiring emails is active.</p>
+                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Connected</p>
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-500">Autonomous polling active</p>
                     </div>
                   </div>
-                  
-                  <button 
+                  <button
                     onClick={handleSyncGmail}
                     disabled={isSyncingGmail}
-                    className="w-full flex items-center justify-center gap-2 bg-indigo-650 hover:bg-indigo-600 disabled:bg-indigo-900/40 border border-indigo-500/30 disabled:border-indigo-900/20 text-white py-2 rounded-lg text-xs font-bold transition-all duration-200"
+                    className="w-full flex items-center justify-center gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 disabled:opacity-40 py-2.5 rounded-xl text-xs font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all duration-200"
                   >
                     {isSyncingGmail ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Syncing Gmail Inbox...
-                      </>
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing...</>
                     ) : (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Trigger Gmail Polling
-                      </>
+                      <><RefreshCw className="w-3.5 h-3.5" /> Sync Inbox</>
                     )}
                   </button>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="p-3 bg-amber-500/5 border border-amber-500/25 rounded-lg flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-400" />
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-xl">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                     <div>
-                      <h4 className="text-xs font-semibold text-amber-400">Gmail Access Required</h4>
-                      <p className="text-[10px] text-gray-500">To check JDs, the agent needs read-only Gmail access.</p>
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Not Connected</p>
+                      <p className="text-[10px] text-neutral-500">Read-only Gmail access required</p>
                     </div>
                   </div>
-                  
-                  <button 
+                  <button
                     onClick={handleConnectGmail}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-550 hover:to-purple-550 text-white py-2 rounded-lg text-xs font-bold shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/20 transition-all duration-200"
+                    className="w-full flex items-center justify-center gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 py-2.5 rounded-xl text-xs font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all duration-200"
                   >
                     Connect Google Account
                   </button>
@@ -554,138 +553,130 @@ export default function Home() {
               )}
             </div>
 
-            {/* Vectorized Resume Hub Card */}
-            <div className="bg-gray-900/30 border border-gray-800/50 rounded-xl p-5 backdrop-blur-sm flex-1 flex flex-col">
-              <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-4">
-                <FileText className="w-4 h-4 text-purple-400" />
-                Vectorized Resume Hub
+            {/* Resume Card */}
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-sm dark:shadow-none transition-colors flex-1 flex flex-col animate-fade-up" style={{ animationDelay: '80ms' }}>
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2 mb-4 tracking-tight">
+                <FileText className="w-4 h-4 text-neutral-400" />
+                Resume Profile
               </h3>
 
               {hasResume ? (
-                <div className="mb-4 p-3 bg-indigo-500/5 border border-indigo-500/25 rounded-lg flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-indigo-400" />
+                <div className="mb-4 flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl">
+                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                   <div>
-                    <h4 className="text-xs font-semibold text-indigo-400">Resume Vector Embedding Active</h4>
-                    <p className="text-[10px] text-gray-500">
-                      CGPA: <span className="font-bold text-gray-200">{currentCgpa}</span> | Embeddings: 768-D pgvector
+                    <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Vector Active</p>
+                    <p className="text-[10px] text-neutral-400">
+                      CGPA: <span className="font-bold text-neutral-700 dark:text-neutral-200">{currentCgpa}</span> · 768-D embedding
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="mb-4 p-3 bg-red-500/5 border border-red-500/25 rounded-lg flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                <div className="mb-4 flex items-center gap-3 p-3 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl">
+                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                   <div>
-                    <h4 className="text-xs font-semibold text-red-400">Resume Missing</h4>
-                    <p className="text-[10px] text-gray-500">Provide resume text below to run match metrics.</p>
+                    <p className="text-xs font-semibold text-red-700 dark:text-red-400">No Resume</p>
+                    <p className="text-[10px] text-neutral-500">Add your resume below to start matching</p>
                   </div>
                 </div>
               )}
 
-              <form onSubmit={handleUploadResume} className="space-y-4 flex-1 flex flex-col justify-between">
-                <div className="space-y-4 flex-1 flex flex-col">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Academic CGPA (10-point scale)</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      min="0"
-                      max="10"
-                      value={cgpa}
-                      onChange={(e) => setCgpa(e.target.value)}
-                      placeholder="e.g. 8.42"
-                      className="w-full bg-gray-950 border border-gray-800/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-700 outline-none transition-all duration-200"
-                    />
-                  </div>
-                  <div className="flex-1 flex flex-col">
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Raw Resume Text / Skills List</label>
-                    <textarea 
-                      value={resumeText}
-                      onChange={(e) => setResumeText(e.target.value)}
-                      placeholder="Paste your resume details, technical stack, internships, projects, and education text here..."
-                      className="w-full flex-1 min-h-[220px] bg-gray-950 border border-gray-800/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-700 outline-none resize-none transition-all duration-200"
-                    />
-                  </div>
+              <form onSubmit={handleUploadResume} className="space-y-4 flex-1 flex flex-col">
+                <div>
+                  <label className="block text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">CGPA (10-point)</label>
+                  <input
+                    type="number" step="0.01" min="0" max="10"
+                    value={cgpa}
+                    onChange={(e) => setCgpa(e.target.value)}
+                    placeholder="e.g. 8.42"
+                    className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-3 py-2.5 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 transition-all duration-200"
+                  />
                 </div>
-                
-                <button 
+                <div className="flex-1 flex flex-col">
+                  <label className="block text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">Resume Text</label>
+                  <textarea
+                    value={resumeText}
+                    onChange={(e) => setResumeText(e.target.value)}
+                    placeholder="Paste your resume — skills, projects, education, internships..."
+                    className="w-full flex-1 min-h-[200px] bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-3 py-2.5 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 resize-none transition-all duration-200"
+                  />
+                </div>
+                <button
                   type="submit"
                   disabled={isUploadingResume}
-                  className="w-full flex items-center justify-center gap-2 mt-4 bg-gray-800 hover:bg-gray-750 disabled:bg-gray-900 border border-gray-700 disabled:border-gray-800 text-gray-100 disabled:text-gray-600 py-2 rounded-lg text-xs font-bold transition-all duration-200"
+                  className="w-full flex items-center justify-center gap-2 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 disabled:opacity-40 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 py-2.5 rounded-xl text-xs font-semibold active:scale-[0.98] transition-all duration-200"
                 >
                   {isUploadingResume ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Saving & Vectorizing Resume...
-                    </>
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Vectorizing...</>
                   ) : (
-                    <>
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      Save & Embed Profile
-                    </>
+                    <><PlusCircle className="w-3.5 h-3.5" /> Save &amp; Embed</>
                   )}
                 </button>
               </form>
             </div>
-
           </section>
 
-          {/* RIGHT PANELS: PIPELINE & DETAILS (8 Columns) */}
+          {/* ─── RIGHT PANELS ─── */}
           <section className="md:col-span-8 grid md:grid-cols-2 gap-6 items-start">
-            
-            {/* Pipeline List View (1 Column on grid) */}
-            <div className="bg-gray-900/20 border border-gray-800/40 rounded-xl p-5 flex flex-col h-[650px]">
+
+            {/* Pipeline */}
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 flex flex-col h-[650px] shadow-sm dark:shadow-none transition-colors animate-fade-up" style={{ animationDelay: '120ms' }}>
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                  <Briefcase className="w-4 h-4 text-emerald-400" />
-                  Active Roles Pipeline
+                <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2 tracking-tight">
+                  <Briefcase className="w-4 h-4 text-neutral-400" />
+                  Pipeline
                 </h3>
-                <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded font-mono">
-                  {matchedJobs.length} roles
+                <span className="text-[10px] bg-neutral-100 dark:bg-neutral-800 text-neutral-500 px-2 py-0.5 rounded-md font-mono transition-colors">
+                  {matchedJobs.length}
                 </span>
               </div>
-              
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+
+              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                 {isLoadingJobs ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-500">
-                    <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
-                    <span className="text-xs">Loading matches...</span>
+                  <div className="h-full flex flex-col items-center justify-center gap-2 text-neutral-400">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-xs">Loading...</span>
                   </div>
                 ) : matchedJobs.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-6 text-gray-600">
-                    <Search className="w-8 h-8 text-gray-700" />
+                  <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-6">
+                    <Search className="w-7 h-7 text-neutral-300 dark:text-neutral-600" />
                     <div>
-                      <p className="text-xs font-bold text-gray-500">No Roles Processed</p>
-                      <p className="text-[10px] mt-1">Connect Gmail and trigger polling, or set up your resume to evaluate matches.</p>
+                      <p className="text-xs font-semibold text-neutral-500">No roles yet</p>
+                      <p className="text-[10px] text-neutral-400 mt-1 max-w-[200px]">Connect Gmail and sync, or upload your resume to start matching.</p>
                     </div>
                   </div>
                 ) : (
                   matchedJobs.map((job) => {
                     const isSelected = selectedJob?.job_id === job.job_id;
                     return (
-                      <div 
+                      <div
                         key={job.job_id}
                         onClick={() => setSelectedJob(job)}
                         className={`p-4 rounded-xl border text-left cursor-pointer transition-all duration-200 ${
-                          isSelected 
-                            ? 'bg-indigo-950/20 border-indigo-500/50 shadow-md shadow-indigo-500/5' 
-                            : 'bg-gray-900/35 border-gray-800/60 hover:bg-gray-900/50 hover:border-gray-750'
+                          isSelected
+                            ? 'bg-neutral-900 dark:bg-white border-neutral-900 dark:border-white text-white dark:text-neutral-900 shadow-md'
+                            : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500'
                         }`}
                       >
                         <div className="flex justify-between items-start gap-3">
                           <div>
-                            <h4 className="text-xs font-bold text-gray-100 max-w-[170px] truncate">{job.role}</h4>
-                            <p className="text-[10px] text-gray-500 font-semibold mt-0.5">{job.company_name}</p>
+                            <h4 className={`text-xs font-bold max-w-[170px] truncate ${isSelected ? 'text-white dark:text-neutral-900' : 'text-neutral-800 dark:text-neutral-200'}`}>
+                              {job.role}
+                            </h4>
+                            <p className={`text-[10px] font-medium mt-0.5 ${isSelected ? 'text-neutral-300 dark:text-neutral-500' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                              {job.company_name}
+                            </p>
                           </div>
-                          <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/5 px-2 py-0.5 rounded-md">
-                            {job.match_score}% Match
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            isSelected ? 'bg-white/20 dark:bg-neutral-900/20' : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+                          }`}>
+                            {job.match_score}%
                           </span>
                         </div>
-                        
-                        <div className="mt-3 flex items-center justify-between text-[9px] text-gray-500 border-t border-gray-800/40 pt-2.5">
-                          <span className="flex items-center gap-1 font-medium">
-                            Deadline: {job.deadline ? new Date(job.deadline).toLocaleDateString() : 'N/A'}
-                          </span>
-                          <span className="flex items-center gap-1 text-gray-400 capitalize hover:text-white">
+                        <div className={`mt-3 flex items-center justify-between text-[9px] border-t pt-2.5 ${
+                          isSelected ? 'border-white/20 dark:border-neutral-900/20 text-neutral-300 dark:text-neutral-500' : 'border-neutral-200 dark:border-neutral-600 text-neutral-400'
+                        }`}>
+                          <span>Deadline: {job.deadline ? new Date(job.deadline).toLocaleDateString() : 'N/A'}</span>
+                          <span className="flex items-center gap-0.5 hover:opacity-70">
                             Details <ChevronRight className="w-3 h-3" />
                           </span>
                         </div>
@@ -696,56 +687,54 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Selected Match Details View (1 Column on grid) */}
-            <div className="bg-gray-900/20 border border-gray-800/40 rounded-xl p-5 h-[650px] flex flex-col">
+            {/* Job Detail */}
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 h-[650px] flex flex-col shadow-sm dark:shadow-none transition-colors animate-fade-up" style={{ animationDelay: '160ms' }}>
               {selectedJob ? (
                 <div className="flex-1 flex flex-col min-h-0">
-                  {/* Job Header */}
-                  <div className="border-b border-gray-800/40 pb-4 flex-shrink-0">
+                  {/* Header */}
+                  <div className="border-b border-neutral-200 dark:border-neutral-700 pb-4 flex-shrink-0">
                     <div className="flex justify-between items-start gap-4 mb-2">
                       <div>
-                        <h3 className="text-sm font-black text-white">{selectedJob.role}</h3>
-                        <p className="text-xs text-indigo-400 font-semibold mt-0.5">{selectedJob.company_name}</p>
+                        <h3 className="text-sm font-black text-neutral-900 dark:text-white tracking-tight">{selectedJob.role}</h3>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 font-semibold mt-0.5">{selectedJob.company_name}</p>
                       </div>
                       {getMatchScoreBadge(selectedJob.match_score)}
                     </div>
                     {selectedJob.deadline && (
-                      <p className="text-[10px] text-gray-500 font-medium">
-                        Deadline: <span className="text-gray-300">{new Date(selectedJob.deadline).toLocaleDateString()}</span>
+                      <p className="text-[10px] text-neutral-400 font-medium">
+                        Deadline: <span className="text-neutral-700 dark:text-neutral-200">{new Date(selectedJob.deadline).toLocaleDateString()}</span>
                       </p>
                     )}
                   </div>
 
-                  {/* Scrollable details */}
+                  {/* Scrollable Content */}
                   <div className="flex-1 overflow-y-auto py-4 space-y-5 pr-1 min-h-0">
-                    
-                    {/* Skill Gap Analysis Matrix */}
+
+                    {/* Skills */}
                     <div>
-                      <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2.5">Skills Matrix</h4>
-                      
+                      <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2.5">Skills</h4>
                       {selectedJob.status === 'needs_profile' ? (
-                        <div className="p-3 bg-red-950/20 border border-red-900/20 rounded-lg text-[10px] text-red-400 flex items-center gap-2">
+                        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl text-[10px] text-red-700 dark:text-red-400">
                           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                          <span>No resume vectorized yet. Paste resume to compute skill gaps.</span>
+                          <span>Upload your resume to compute skill analysis.</span>
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {/* Required skills */}
                           <div>
-                            <span className="text-[9px] text-gray-500 font-bold block mb-1">Required Skills:</span>
+                            <span className="text-[9px] text-neutral-500 font-semibold block mb-1.5">Required:</span>
                             <div className="flex flex-wrap gap-1.5">
                               {selectedJob.required_skills.length === 0 ? (
-                                <span className="text-xs text-gray-600">None extracted.</span>
+                                <span className="text-xs text-neutral-400">None extracted.</span>
                               ) : (
                                 selectedJob.required_skills.map((skill: string) => {
                                   const isMissing = selectedJob.missing_skills.includes(skill);
                                   return (
-                                    <span 
-                                      key={skill} 
-                                      className={`px-2 py-0.5 rounded text-[9px] font-semibold border ${
-                                        isMissing 
-                                          ? 'bg-rose-950/20 border-rose-900/30 text-rose-400' 
-                                          : 'bg-emerald-950/20 border-emerald-900/30 text-emerald-400'
+                                    <span
+                                      key={skill}
+                                      className={`px-2 py-0.5 rounded-md text-[9px] font-semibold border ${
+                                        isMissing
+                                          ? 'bg-red-50 dark:bg-red-500/5 border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400'
+                                          : 'bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                                       }`}
                                     >
                                       {skill} {isMissing ? '✗' : '✓'}
@@ -756,13 +745,12 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Missing skills specifically */}
                           {selectedJob.missing_skills.length > 0 && (
                             <div>
-                              <span className="text-[9px] text-rose-400/80 font-bold block mb-1">Key Gaps Identified:</span>
+                              <span className="text-[9px] text-red-500 dark:text-red-400 font-semibold block mb-1.5">Gaps:</span>
                               <div className="flex flex-wrap gap-1.5">
                                 {selectedJob.missing_skills.map((skill: string) => (
-                                  <span key={skill} className="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                                  <span key={skill} className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400">
                                     {skill}
                                   </span>
                                 ))}
@@ -773,56 +761,47 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* Generated Cover Letter Assets */}
+                    {/* Cover Letter */}
                     <div className="flex-1 flex flex-col min-h-0">
                       <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Tailored Application Assets</h4>
-                        
+                        <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Cover Letter</h4>
                         {selectedJob.generated_cover_letter && selectedJob.status !== 'needs_profile' && (
-                          <button 
+                          <button
                             onClick={() => handleCopyCoverLetter(selectedJob.generated_cover_letter)}
-                            className="flex items-center gap-1 px-2 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-650 rounded text-[9px] font-bold text-gray-300 hover:text-white transition-all duration-150"
+                            className="flex items-center gap-1 px-2 py-1 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 rounded-lg text-[9px] font-semibold text-neutral-600 dark:text-neutral-300 transition-all duration-150"
                           >
                             {copiedText ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                Copied!
-                              </>
+                              <><Check className="w-3 h-3 text-emerald-500" /> Copied</>
                             ) : (
-                              <>
-                                <Copy className="w-3 h-3" />
-                                Copy Cover Letter
-                              </>
+                              <><Copy className="w-3 h-3" /> Copy</>
                             )}
                           </button>
                         )}
                       </div>
-
-                      <div className="flex-1 bg-gray-950/60 border border-gray-800/80 rounded-xl p-4 font-mono text-[10px] leading-relaxed text-gray-400 overflow-y-auto whitespace-pre-wrap min-h-[220px]">
-                        {selectedJob.generated_cover_letter || 'No asset generated.'}
+                      <div className="flex-1 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-4 font-mono text-[10px] leading-relaxed text-neutral-600 dark:text-neutral-400 overflow-y-auto whitespace-pre-wrap min-h-[200px] transition-colors">
+                        {selectedJob.generated_cover_letter || 'No cover letter generated.'}
                       </div>
                     </div>
 
                   </div>
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-650">
-                  <FileText className="w-10 h-10 text-gray-800 mb-2" />
-                  <p className="text-xs font-bold text-gray-500">No Job Selected</p>
-                  <p className="text-[10px] max-w-xs mt-1">Select a matched role from the pipeline to inspect match analytics, skills matrix, and cover letters.</p>
+                <div className="h-full flex flex-col items-center justify-center text-center p-6">
+                  <FileText className="w-8 h-8 text-neutral-300 dark:text-neutral-600 mb-3" />
+                  <p className="text-xs font-semibold text-neutral-500">No Role Selected</p>
+                  <p className="text-[10px] text-neutral-400 max-w-[220px] mt-1">Select a role from the pipeline to view match details and cover letter.</p>
                 </div>
               )}
             </div>
 
           </section>
-
         </main>
       )}
 
-      {/* FOOTER */}
-      <footer className="bg-[#070709] border-t border-gray-800/30 px-6 py-4 text-center flex-shrink-0">
-        <p className="text-[10px] text-gray-600 font-medium">
-          PlacementOps Platform • Autonomous Hackathon Agent Tier: Outstanding
+      {/* ─── FOOTER ─── */}
+      <footer className="border-t border-neutral-200 dark:border-neutral-800 px-6 py-4 text-center flex-shrink-0 transition-colors">
+        <p className="text-[10px] text-neutral-400 font-medium">
+          PlacementOps · Autonomous Placement Agent
         </p>
       </footer>
     </div>

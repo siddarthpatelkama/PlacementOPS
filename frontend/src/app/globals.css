@@ -1,26 +1,98 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg-light: #f0f4ff;
+  --color-bg-dark: #0a0a0a;
+  --color-fg-light: #1a1a1a;
+  --color-fg-dark: #e5e5e5;
+  --card-bg: rgba(255,255,255,0.15);
+  --card-blur: blur(10px);
+  --gradient-light: linear-gradient(135deg, #e0eaff, #f0f4ff);
+  --gradient-dark: linear-gradient(135deg, #0a0a0a, #1a1a1a);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--color-bg-dark);
+    --foreground: var(--color-fg-dark);
+  }
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: var(--color-bg-light);
+    --foreground: var(--color-fg-light);
   }
 }
 
-body {
-  background: var(--background);
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--gradient-light);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem;
+  backdrop-filter: var(--card-blur);
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: #4285F4;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  background: #3367D6;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.link {
+  color: #4285F4;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.alert-success {
+  background: #e6f4ea;
+  color: #0a7f23;
+  padding: 0.75rem;
+  border-radius: 6px;
+}
+
+.alert-error {
+  background: #fbe9e9;
+  color: #d93025;
+  padding: 0.75rem;
+  border-radius: 6px;
 }

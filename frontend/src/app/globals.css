@@ -1,98 +1,78 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
 
-:root {
-  --color-bg-light: #f0f4ff;
-  --color-bg-dark: #0a0a0a;
-  --color-fg-light: #1a1a1a;
-  --color-fg-dark: #e5e5e5;
-  --card-bg: rgba(255,255,255,0.15);
-  --card-blur: blur(10px);
-  --gradient-light: linear-gradient(135deg, #e0eaff, #f0f4ff);
-  --gradient-dark: linear-gradient(135deg, #0a0a0a, #1a1a1a);
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: var(--color-bg-dark);
-    --foreground: var(--color-fg-dark);
-  }
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --background: var(--color-bg-light);
-    --foreground: var(--color-fg-light);
-  }
+/* ===== BASE RESET & TYPOGRAPHY ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-html, body {
-  height: 100%;
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   margin: 0;
   padding: 0;
-  font-family: 'Inter', sans-serif;
-  background: var(--gradient-light);
-  color: var(--foreground);
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
-.auth-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 2rem;
-  backdrop-filter: var(--card-blur);
-  background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+/* ===== SCROLLBAR STYLING ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #fff;
-  background: #4285F4;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: transform 0.2s, background 0.2s;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.button:hover {
-  transform: translateY(-2px);
-  background: #3367D6;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
 }
 
-.input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
-.link {
-  color: #4285F4;
-  cursor: pointer;
-  text-decoration: underline;
+/* ===== SELECTION HIGHLIGHT ===== */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: #c7d2fe;
 }
 
-.alert-success {
-  background: #e6f4ea;
-  color: #0a7f23;
-  padding: 0.75rem;
-  border-radius: 6px;
+/* ===== SMOOTH ANIMATIONS ===== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.alert-error {
-  background: #fbe9e9;
-  color: #d93025;
-  padding: 0.75rem;
-  border-radius: 6px;
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease-out both;
+}
+
+/* ===== FOCUS RING UTILITY ===== */
+input:focus, textarea:focus, select:focus, button:focus-visible {
+  outline: none;
 }

@@ -15,6 +15,8 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 
+dotenv.config();
+
 // Route imports
 import authRouter from './routes/auth.js';
 import profileRouter from './routes/profile.js';
@@ -26,8 +28,6 @@ import resumesRouter from './routes/resumes.js';
 // Pipeline imports
 import { pollJobEmails } from './services/gmail.js';
 import { runPlacementPipeline } from './agents/graph.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

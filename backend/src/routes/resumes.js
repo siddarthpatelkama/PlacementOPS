@@ -10,9 +10,11 @@
  */
 
 import express from 'express';
-import multer from 'multer';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+const multer = require('multer');
+const os = require('os');
+const fs = require('fs');
 global.DOMMatrix = global.DOMMatrix || class DOMMatrix {};
 const pdfParse = require('pdf-parse');
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
@@ -20,41 +22,22 @@ import { supabaseAdmin } from '../db/supabase.js';
 
 const router = express.Router();
 
-/** Multer configured for in-memory storage (no disk writes). */
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF files are accepted.'));
-    }
-  },
-});
+const upload = multer({ 
+  dest: os.tmpdir(),
+  limits: { fileSize: 2 * 1024 * 1024 } 
+}).single('file'); 
 
-
-
-/**
- * POST /api/resumes/upload
- *
- * Expects multipart/form-data with:
- *   - file: PDF resume (field name "resume")
- *   - user_id: Supabase UUID of the student (text field)
- *
- * Returns: { success, resumeId, resumeUrl }
- */
-router.post('/upload', upload.single('resume'), async (req, res) => {
-  const { user_id } = req.body;
+router.post('/upload', upload, async (req, res) => {
+  if (!req.file) {
+    return res.status(422).json({ error: "Missing file payload. Ensure FormData uses key 'file'." });
+  }
+  if (!req.body.user_id) {
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    return res.status(422).json({ error: "Missing user_id parameter." });
+  }
+  
+  const user_id = req.body.user_id;
   const file = req.file;
-
-  if (!user_id) {
-    return res.status(400).json({ success: false, error: 'user_id is required.' });
-  }
-
-  if (!file) {
-    return res.status(400).json({ success: false, error: 'A PDF file is required.' });
-  }
 
   const embeddings = new GoogleGenerativeAIEmbeddings({
     model: 'text-embedding-004',
@@ -63,12 +46,15 @@ router.post('/upload', upload.single('resume'), async (req, res) => {
 
   try {
     /* ── Step 1: Extract raw text from PDF ── */
+    const dataBuffer = fs.readFileSync(file.path);
+    
     let rawText;
     try {
-      const parsed = await pdfParse(file.buffer);
+      const parsed = await pdfParse(dataBuffer);
       rawText = parsed.text;
 
       if (!rawText || rawText.trim().length === 0) {
+        fs.unlinkSync(file.path);
         return res.status(422).json({
           success: false,
           error: 'Could not extract text from the PDF. The file may be image-based or empty.',
@@ -76,6 +62,7 @@ router.post('/upload', upload.single('resume'), async (req, res) => {
       }
     } catch (parseError) {
       console.error('[resumes] PDF parse failed:', parseError.message);
+      fs.unlinkSync(file.path);
       return res.status(422).json({
         success: false,
         error: 'Failed to parse the PDF file. Ensure it is a valid, text-based PDF.',
@@ -92,10 +79,13 @@ router.post('/upload', upload.single('resume'), async (req, res) => {
     const fileName = `${user_id}/${Date.now()}_${file.originalname}`;
     const { data: storageData, error: storageError } = await supabaseAdmin.storage
       .from('resumes')
-      .upload(fileName, file.buffer, {
+      .upload(fileName, dataBuffer, {
         contentType: 'application/pdf',
         upsert: true,
       });
+
+    // We no longer need the file on disk
+    fs.unlinkSync(file.path);
 
     if (storageError) {
       console.error('[resumes] Storage upload failed:', storageError.message);
@@ -137,6 +127,7 @@ router.post('/upload', upload.single('resume'), async (req, res) => {
       textLength: rawText.length,
     });
   } catch (error) {
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     console.error('[resumes] Unexpected error:', error.message);
     res.status(500).json({
       success: false,

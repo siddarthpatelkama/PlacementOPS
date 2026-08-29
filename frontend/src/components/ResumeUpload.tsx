@@ -64,7 +64,7 @@ export default function ResumeUpload({ onUploadSuccess }: { onUploadSuccess?: ()
       }
 
       const formData = new FormData();
-      formData.append('resume', file);
+      formData.append('file', file);
       formData.append('user_id', user.id);
 
       const response = await fetch(`${API_URL}/api/resumes/upload`, {

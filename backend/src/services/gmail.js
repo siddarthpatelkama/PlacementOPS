@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import dotenv from 'dotenv';
 import { supabaseAdmin } from '../db/supabase.js';
 import { runPlacementPipeline } from '../agents/graph.js';
 

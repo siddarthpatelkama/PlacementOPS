@@ -4,10 +4,12 @@ import { supabaseAdmin } from '../db/supabase.js';
 
 const router = express.Router();
 
+const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback';
+
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+  redirectUri
 );
 
 // GET /api/gmail

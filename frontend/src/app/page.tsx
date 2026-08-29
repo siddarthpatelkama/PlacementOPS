@@ -1,60 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { 
-  User, 
-  Briefcase, 
-  Mail, 
-  FileText, 
-  CheckCircle, 
-  AlertTriangle, 
-  RefreshCw, 
-  LogOut, 
-  ChevronRight, 
-  Copy, 
-  PlusCircle, 
-  Loader2, 
-  UserCheck, 
-  BookOpen, 
+import { createClient } from '@/utils/supabase/client';
+import {
+  Briefcase,
+  Mail,
+  FileText,
   Sparkles,
-  Search,
-  Check,
-  Award,
+  BookOpen,
   Sun,
   Moon,
-  ArrowUpRight,
-  X
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-
-export default function Home() {
-  // Authentication states
-  const [session, setSession] = useState<any>(null);
-  const [loadingSession, setLoadingSession] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [authMessage, setAuthMessage] = useState('');
-
-  // Dashboard states
-  const [cgpa, setCgpa] = useState('');
-  const [resumeText, setResumeText] = useState('');
-  const [isUploadingResume, setIsUploadingResume] = useState(false);
-  const [hasResume, setHasResume] = useState(false);
-  const [currentCgpa, setCurrentCgpa] = useState<number | null>(null);
-  
-  const [gmailConnected, setGmailConnected] = useState(false);
-  const [isSyncingGmail, setIsSyncingGmail] = useState(false);
-  
-  const [matchedJobs, setMatchedJobs] = useState<any[]>([]);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<any>(null);
-  
-  const [copiedText, setCopiedText] = useState(false);
-  const [messageAlert, setMessageAlert] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+export default function LandingPage() {
+  const supabase = createClient();
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
 
   // Theme
   const [isDark, setIsDark] = useState(false);
@@ -79,730 +44,97 @@ export default function Home() {
     }
   };
 
-  // Parse URL query parameters for Gmail connection callbacks
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('gmail_connected') === 'true') {
-        showAlert('success', 'Gmail connected successfully. Background monitoring is now active.');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else if (urlParams.get('gmail_error') === 'true') {
-        showAlert('error', 'Gmail authorization failed. Please try again.');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    }
-  }, []);
-
-  // Monitor Supabase Auth Session
+  // Redirect if already authenticated
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoadingSession(false);
+      if (session) {
+        router.push('/dashboard');
+      } else {
+        setChecking(false);
+      }
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoadingSession(false);
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch student profile and matches when session becomes available
-  useEffect(() => {
-    if (session?.user) {
-      fetchStudentProfile();
-      fetchJobMatches();
-    }
-  }, [session]);
-
-  const showAlert = (type: 'success' | 'error', text: string) => {
-    setMessageAlert({ type, text });
-    setTimeout(() => setMessageAlert(null), 5000);
-  };
-
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    setAuthMessage('');
-    
-    if (!email || !password) {
-      setAuthError('Please fill in all fields.');
-      return;
-    }
-
-    try {
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setAuthMessage('Account created. Check your email to confirm, or sign in directly.');
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
-    } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed.');
-    }
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setMatchedJobs([]);
-    setSelectedJob(null);
-    setHasResume(false);
-    setGmailConnected(false);
-  };
-
-  const fetchStudentProfile = async () => {
-    if (!session?.user) return;
-    try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      
-      const { data: publicUser, error: publicUserError } = await supabase
-        .from('users')
-        .select('google_refresh_token')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
-      if (publicUser?.google_refresh_token) {
-        setGmailConnected(true);
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('student_profiles')
-        .select('cgpa, raw_resume_text')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-
-      if (profile) {
-        setHasResume(true);
-        setCurrentCgpa(profile.cgpa ? parseFloat(profile.cgpa) : null);
-        setCgpa(profile.cgpa ? profile.cgpa.toString() : '');
-        setResumeText(profile.raw_resume_text || '');
-      } else {
-        setHasResume(false);
-      }
-    } catch (err: any) {
-      console.error('Error fetching student profile:', err.message);
-    }
-  };
-
-  const fetchJobMatches = async () => {
-    if (!session?.user) return;
-    setIsLoadingJobs(true);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/jobs/matched/${session.user.id}`);
-      const data = await res.json();
-      if (data.success) {
-        setMatchedJobs(data.matches || []);
-        if (selectedJob) {
-          const updatedSelected = data.matches.find((m: any) => m.job_id === selectedJob.job_id);
-          if (updatedSelected) setSelectedJob(updatedSelected);
-        }
-      }
-    } catch (err: any) {
-      console.error('Error fetching job matches:', err.message);
-    } finally {
-      setIsLoadingJobs(false);
-    }
-  };
-
-  const handleUploadResume = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!session?.user || !resumeText) {
-      showAlert('error', 'Please enter your resume details.');
-      return;
-    }
-
-    setIsUploadingResume(true);
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/profile/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: session.user.id,
-          cgpa: cgpa ? parseFloat(cgpa) : null,
-          rawResumeText: resumeText
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setHasResume(true);
-        setCurrentCgpa(cgpa ? parseFloat(cgpa) : null);
-        showAlert('success', 'Resume parsed and vectorized successfully.');
-        fetchJobMatches();
-      } else {
-        showAlert('error', data.error || 'Failed to process resume.');
-      }
-    } catch (err: any) {
-      console.error('Error uploading resume:', err);
-      showAlert('error', 'Network error. Could not connect to backend.');
-    } finally {
-      setIsUploadingResume(false);
-    }
-  };
-
-  const handleSyncGmail = async () => {
-    if (!session?.user) return;
-    if (!gmailConnected) {
-      showAlert('error', 'Please connect your Google Account first.');
-      return;
-    }
-
-    setIsSyncingGmail(true);
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/webhooks/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        const syncResult = data.results?.find((r: any) => r.user === session.user.email);
-        const count = syncResult?.synced_jobs || 0;
-        showAlert('success', `Gmail sync complete. ${count} new role(s) discovered.`);
-        fetchJobMatches();
-      } else {
-        showAlert('error', data.error || 'Failed to sync Gmail.');
-      }
-    } catch (err: any) {
-      console.error('Error syncing Gmail:', err);
-      showAlert('error', 'Network error during Gmail sync.');
-    } finally {
-      setIsSyncingGmail(false);
-    }
-  };
-
-  const handleCopyCoverLetter = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(true);
-    setTimeout(() => setCopiedText(false), 2000);
-  };
-
-  const handleConnectGmail = () => {
-    if (!session?.user) return;
-    window.location.href = `${BACKEND_URL}/api/auth/google?userId=${session.user.id}`;
-  };
-
-  const getMatchScoreBadge = (score: number) => {
-    if (score >= 80) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          {score}%
-        </span>
-      );
-    } else if (score >= 50) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-          {score}%
-        </span>
-      );
-    } else {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-200 dark:border-red-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-          {score}%
-        </span>
-      );
-    }
-  };
-
-  /* ─── LOADING SCREEN ─── */
-  if (loadingSession) {
+  if (checking) {
     return (
-      <div className="min-h-screen flex flex-col justify-center items-center gap-4 bg-white dark:bg-neutral-950">
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-neutral-950">
         <Loader2 className="w-8 h-8 animate-spin text-neutral-400" />
-        <p className="text-neutral-400 text-sm tracking-wide">Loading...</p>
       </div>
     );
   }
 
-  /* ─── MAIN RENDER ─── */
   return (
     <div className="min-h-screen flex flex-col bg-neutral-50 dark:bg-neutral-950 transition-colors duration-300">
 
-      {/* ─── ALERT TOAST ─── */}
-      {messageAlert && (
-        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-slide-down ${
-          messageAlert.type === 'success'
-            ? 'bg-white dark:bg-neutral-900 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-            : 'bg-white dark:bg-neutral-900 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
-        }`}>
-          {messageAlert.type === 'success'
-            ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-            : <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-          }
-          <span className="text-sm font-medium">{messageAlert.text}</span>
-          <button onClick={() => setMessageAlert(null)} className="ml-2 p-0.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
-            <X className="w-3.5 h-3.5 text-neutral-400" />
-          </button>
-        </div>
-      )}
-
       {/* ─── HEADER ─── */}
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-neutral-950/80 backdrop-blur-xl border-b border-neutral-200/60 dark:border-neutral-800/60 px-6 lg:px-10 py-4 flex items-center justify-between transition-colors duration-300">
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-neutral-950/80 backdrop-blur-xl border-b border-neutral-200/60 dark:border-neutral-800/60 px-6 lg:px-10 py-4 flex items-center justify-between transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-neutral-900 dark:bg-white rounded-lg flex items-center justify-center transition-colors duration-300">
+          <div className="w-8 h-8 bg-neutral-900 dark:bg-white rounded-lg flex items-center justify-center">
             <Briefcase className="w-4 h-4 text-white dark:text-neutral-900" />
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight text-neutral-900 dark:text-white">PlacementOps</h1>
-            <p className="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Autonomous Agent</p>
+            <p className="text-[10px] text-neutral-400 font-medium tracking-widest uppercase">Autonomous Agent</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Theme Toggle */}
-          <button
-            onClick={toggleTheme}
-            className="p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all duration-200 shadow-sm"
-            aria-label="Toggle theme"
-          >
-            {isDark
-              ? <Sun className="w-4 h-4 text-amber-500" />
-              : <Moon className="w-4 h-4 text-neutral-500" />
-            }
+          <button onClick={toggleTheme} className="p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all shadow-sm" aria-label="Toggle theme">
+            {isDark ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-neutral-500" />}
           </button>
-
-          {session?.user && (
-            <>
-              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl transition-colors">
-                <User className="w-3.5 h-3.5 text-neutral-500" />
-                <span className="text-xs text-neutral-600 dark:text-neutral-300 font-medium max-w-[180px] truncate">{session.user.email}</span>
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-neutral-500 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/40 transition-all duration-200"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </button>
-            </>
-          )}
+          <Link href="/login" className="px-4 py-2.5 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-xl text-sm font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all shadow-sm">
+            Sign In
+          </Link>
         </div>
       </header>
 
-      {/* ─── LANDING PAGE (LOGGED OUT) ─── */}
-      {!session ? (
-        <main className="flex-1 flex flex-col items-center justify-center px-6 py-16 md:py-24">
-          <div className="max-w-5xl w-full grid md:grid-cols-12 gap-12 md:gap-20 items-center">
+      {/* ─── HERO ─── */}
+      <main className="flex-1 flex flex-col items-center justify-center px-6 py-20 md:py-28">
+        <div className="max-w-3xl w-full text-center animate-fade-up">
+          <span className="inline-block px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 tracking-wide mb-6">
+            AI-Powered Placement Agent
+          </span>
 
-            {/* Left: Hero Copy */}
-            <div className="md:col-span-7 flex flex-col gap-6 animate-fade-up">
-              <span className="self-start px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 tracking-wide transition-colors">
-                AI-Powered Placement Agent
-              </span>
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.08] text-neutral-900 dark:text-white mb-6">
+            Never miss a{' '}
+            <span className="text-neutral-400 dark:text-neutral-500">placement offer.</span>
+          </h2>
 
-              <h2 className="text-4xl sm:text-5xl md:text-[3.5rem] font-black tracking-tight leading-[1.08] text-neutral-900 dark:text-white">
-                Never miss a{' '}
-                <span className="text-neutral-400 dark:text-neutral-500">placement offer.</span>
-              </h2>
+          <p className="text-neutral-500 dark:text-neutral-400 text-base md:text-lg leading-relaxed max-w-xl mx-auto mb-10">
+            PlacementOps monitors your inbox, extracts recruiter emails, matches JD criteria against your resume, and drafts tailored cover letters — autonomously.
+          </p>
 
-              <p className="text-neutral-500 dark:text-neutral-400 text-base md:text-lg leading-relaxed max-w-lg">
-                PlacementOps monitors your inbox, extracts recruiter emails, matches JD criteria against your resume, and drafts tailored cover letters — autonomously.
-              </p>
-
-              {/* Feature Grid */}
-              <div className="grid sm:grid-cols-2 gap-4 mt-2 stagger">
-                {[
-                  { icon: Mail, title: 'Gmail Monitoring', desc: 'Autonomous email polling and alerts' },
-                  { icon: FileText, title: 'Vector Resume', desc: 'Parsed and stored as embeddings' },
-                  { icon: Sparkles, title: 'Match Scoring', desc: 'Cosine similarity + CGPA checks' },
-                  { icon: BookOpen, title: 'Cover Letters', desc: 'AI-generated, gap-aware materials' },
-                ].map(({ icon: Icon, title, desc }) => (
-                  <div key={title} className="flex gap-3 items-start p-3 rounded-xl animate-fade-up">
-                    <div className="mt-0.5 p-2 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors">
-                      <Icon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{title}</h4>
-                      <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">{desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right: Auth Card */}
-            <div className="md:col-span-5 animate-fade-up" style={{ animationDelay: '150ms' }}>
-              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-8 shadow-sm dark:shadow-none transition-colors duration-300">
-                <h3 className="text-xl font-bold text-neutral-900 dark:text-white tracking-tight">
-                  {isSignUp ? 'Create Account' : 'Welcome Back'}
-                </h3>
-                <p className="text-sm text-neutral-400 dark:text-neutral-500 mt-1 mb-6">
-                  {isSignUp ? 'Start tracking placements autonomously' : 'Sign in to your dashboard'}
-                </p>
-
-                <form onSubmit={handleAuth} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">Email</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@college.edu"
-                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-4 py-3 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 transition-all duration-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">Password</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-4 py-3 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 transition-all duration-200"
-                    />
-                  </div>
-
-                  {authError && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-xl text-xs font-medium text-red-700 dark:text-red-400">
-                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                      <span>{authError}</span>
-                    </div>
-                  )}
-
-                  {authMessage && (
-                    <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30 rounded-xl text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                      <span>{authMessage}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="w-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-semibold py-3 rounded-xl text-sm hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all duration-200 shadow-sm"
-                  >
-                    {isSignUp ? 'Create Account' : 'Sign In'}
-                  </button>
-                </form>
-
-                <div className="flex items-center gap-4 my-5">
-                  <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
-                  <span className="text-xs text-neutral-400">or</span>
-                  <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
-                </div>
-
-                <button
-                  onClick={() => { setAuthError(''); setAuthMessage(''); setIsSignUp(!isSignUp); }}
-                  className="w-full bg-transparent hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white font-medium py-2.5 rounded-xl text-sm transition-all duration-200"
-                >
-                  {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
-                </button>
-              </div>
-            </div>
-
+          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
+            <Link href="/login" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-xl text-sm font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all shadow-sm">
+              Get Started <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
-        </main>
-      ) : (
-        /* ─── DASHBOARD (LOGGED IN) ─── */
-        <main className="flex-1 max-w-7xl w-full mx-auto p-6 lg:p-10 grid md:grid-cols-12 gap-6 lg:gap-8 overflow-y-auto">
 
-          {/* ─── LEFT SIDEBAR ─── */}
-          <section className="md:col-span-4 flex flex-col gap-6">
-
-            {/* Gmail Card */}
-            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-sm dark:shadow-none transition-colors animate-fade-up">
-              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2 mb-4 tracking-tight">
-                <Mail className="w-4 h-4 text-neutral-400" />
-                Gmail Monitoring
-              </h3>
-
-              {gmailConnected ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl">
-                    <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Connected</p>
-                      <p className="text-[10px] text-neutral-500 dark:text-neutral-500">Autonomous polling active</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleSyncGmail}
-                    disabled={isSyncingGmail}
-                    className="w-full flex items-center justify-center gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 disabled:opacity-40 py-2.5 rounded-xl text-xs font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all duration-200"
-                  >
-                    {isSyncingGmail ? (
-                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing...</>
-                    ) : (
-                      <><RefreshCw className="w-3.5 h-3.5" /> Sync Inbox</>
-                    )}
-                  </button>
+          {/* Feature Grid */}
+          <div className="grid sm:grid-cols-2 gap-4 max-w-lg mx-auto stagger">
+            {[
+              { icon: Mail, title: 'Gmail Monitoring', desc: 'Autonomous email polling and alerts' },
+              { icon: FileText, title: 'Vector Resume', desc: 'Parsed and stored as embeddings' },
+              { icon: Sparkles, title: 'Match Scoring', desc: 'Cosine similarity + CGPA checks' },
+              { icon: BookOpen, title: 'Cover Letters', desc: 'AI-generated, gap-aware materials' },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="flex gap-3 items-start p-4 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm dark:shadow-none transition-colors animate-fade-up">
+                <div className="mt-0.5 p-2 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+                  <Icon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-xl">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Not Connected</p>
-                      <p className="text-[10px] text-neutral-500">Read-only Gmail access required</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleConnectGmail}
-                    className="w-full flex items-center justify-center gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 py-2.5 rounded-xl text-xs font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-100 active:scale-[0.98] transition-all duration-200"
-                  >
-                    Connect Google Account
-                  </button>
+                <div className="text-left">
+                  <h4 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{title}</h4>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">{desc}</p>
                 </div>
-              )}
-            </div>
-
-            {/* Resume Card */}
-            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-sm dark:shadow-none transition-colors flex-1 flex flex-col animate-fade-up" style={{ animationDelay: '80ms' }}>
-              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2 mb-4 tracking-tight">
-                <FileText className="w-4 h-4 text-neutral-400" />
-                Resume Profile
-              </h3>
-
-              {hasResume ? (
-                <div className="mb-4 flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Vector Active</p>
-                    <p className="text-[10px] text-neutral-400">
-                      CGPA: <span className="font-bold text-neutral-700 dark:text-neutral-200">{currentCgpa}</span> · 768-D embedding
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="mb-4 flex items-center gap-3 p-3 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl">
-                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-red-700 dark:text-red-400">No Resume</p>
-                    <p className="text-[10px] text-neutral-500">Add your resume below to start matching</p>
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={handleUploadResume} className="space-y-4 flex-1 flex flex-col">
-                <div>
-                  <label className="block text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">CGPA (10-point)</label>
-                  <input
-                    type="number" step="0.01" min="0" max="10"
-                    value={cgpa}
-                    onChange={(e) => setCgpa(e.target.value)}
-                    placeholder="e.g. 8.42"
-                    className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-3 py-2.5 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 transition-all duration-200"
-                  />
-                </div>
-                <div className="flex-1 flex flex-col">
-                  <label className="block text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">Resume Text</label>
-                  <textarea
-                    value={resumeText}
-                    onChange={(e) => setResumeText(e.target.value)}
-                    placeholder="Paste your resume — skills, projects, education, internships..."
-                    className="w-full flex-1 min-h-[200px] bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:border-neutral-900 dark:focus:border-neutral-400 rounded-xl px-3 py-2.5 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 resize-none transition-all duration-200"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isUploadingResume}
-                  className="w-full flex items-center justify-center gap-2 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 disabled:opacity-40 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 py-2.5 rounded-xl text-xs font-semibold active:scale-[0.98] transition-all duration-200"
-                >
-                  {isUploadingResume ? (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Vectorizing...</>
-                  ) : (
-                    <><PlusCircle className="w-3.5 h-3.5" /> Save &amp; Embed</>
-                  )}
-                </button>
-              </form>
-            </div>
-          </section>
-
-          {/* ─── RIGHT PANELS ─── */}
-          <section className="md:col-span-8 grid md:grid-cols-2 gap-6 items-start">
-
-            {/* Pipeline */}
-            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 flex flex-col h-[650px] shadow-sm dark:shadow-none transition-colors animate-fade-up" style={{ animationDelay: '120ms' }}>
-              <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2 tracking-tight">
-                  <Briefcase className="w-4 h-4 text-neutral-400" />
-                  Pipeline
-                </h3>
-                <span className="text-[10px] bg-neutral-100 dark:bg-neutral-800 text-neutral-500 px-2 py-0.5 rounded-md font-mono transition-colors">
-                  {matchedJobs.length}
-                </span>
               </div>
-
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-                {isLoadingJobs ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-2 text-neutral-400">
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    <span className="text-xs">Loading...</span>
-                  </div>
-                ) : matchedJobs.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-6">
-                    <Search className="w-7 h-7 text-neutral-300 dark:text-neutral-600" />
-                    <div>
-                      <p className="text-xs font-semibold text-neutral-500">No roles yet</p>
-                      <p className="text-[10px] text-neutral-400 mt-1 max-w-[200px]">Connect Gmail and sync, or upload your resume to start matching.</p>
-                    </div>
-                  </div>
-                ) : (
-                  matchedJobs.map((job) => {
-                    const isSelected = selectedJob?.job_id === job.job_id;
-                    return (
-                      <div
-                        key={job.job_id}
-                        onClick={() => setSelectedJob(job)}
-                        className={`p-4 rounded-xl border text-left cursor-pointer transition-all duration-200 ${
-                          isSelected
-                            ? 'bg-neutral-900 dark:bg-white border-neutral-900 dark:border-white text-white dark:text-neutral-900 shadow-md'
-                            : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start gap-3">
-                          <div>
-                            <h4 className={`text-xs font-bold max-w-[170px] truncate ${isSelected ? 'text-white dark:text-neutral-900' : 'text-neutral-800 dark:text-neutral-200'}`}>
-                              {job.role}
-                            </h4>
-                            <p className={`text-[10px] font-medium mt-0.5 ${isSelected ? 'text-neutral-300 dark:text-neutral-500' : 'text-neutral-500 dark:text-neutral-400'}`}>
-                              {job.company_name}
-                            </p>
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                            isSelected ? 'bg-white/20 dark:bg-neutral-900/20' : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
-                          }`}>
-                            {job.match_score}%
-                          </span>
-                        </div>
-                        <div className={`mt-3 flex items-center justify-between text-[9px] border-t pt-2.5 ${
-                          isSelected ? 'border-white/20 dark:border-neutral-900/20 text-neutral-300 dark:text-neutral-500' : 'border-neutral-200 dark:border-neutral-600 text-neutral-400'
-                        }`}>
-                          <span>Deadline: {job.deadline ? new Date(job.deadline).toLocaleDateString() : 'N/A'}</span>
-                          <span className="flex items-center gap-0.5 hover:opacity-70">
-                            Details <ChevronRight className="w-3 h-3" />
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Job Detail */}
-            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 h-[650px] flex flex-col shadow-sm dark:shadow-none transition-colors animate-fade-up" style={{ animationDelay: '160ms' }}>
-              {selectedJob ? (
-                <div className="flex-1 flex flex-col min-h-0">
-                  {/* Header */}
-                  <div className="border-b border-neutral-200 dark:border-neutral-700 pb-4 flex-shrink-0">
-                    <div className="flex justify-between items-start gap-4 mb-2">
-                      <div>
-                        <h3 className="text-sm font-black text-neutral-900 dark:text-white tracking-tight">{selectedJob.role}</h3>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-400 font-semibold mt-0.5">{selectedJob.company_name}</p>
-                      </div>
-                      {getMatchScoreBadge(selectedJob.match_score)}
-                    </div>
-                    {selectedJob.deadline && (
-                      <p className="text-[10px] text-neutral-400 font-medium">
-                        Deadline: <span className="text-neutral-700 dark:text-neutral-200">{new Date(selectedJob.deadline).toLocaleDateString()}</span>
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Scrollable Content */}
-                  <div className="flex-1 overflow-y-auto py-4 space-y-5 pr-1 min-h-0">
-
-                    {/* Skills */}
-                    <div>
-                      <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2.5">Skills</h4>
-                      {selectedJob.status === 'needs_profile' ? (
-                        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl text-[10px] text-red-700 dark:text-red-400">
-                          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                          <span>Upload your resume to compute skill analysis.</span>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div>
-                            <span className="text-[9px] text-neutral-500 font-semibold block mb-1.5">Required:</span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {selectedJob.required_skills.length === 0 ? (
-                                <span className="text-xs text-neutral-400">None extracted.</span>
-                              ) : (
-                                selectedJob.required_skills.map((skill: string) => {
-                                  const isMissing = selectedJob.missing_skills.includes(skill);
-                                  return (
-                                    <span
-                                      key={skill}
-                                      className={`px-2 py-0.5 rounded-md text-[9px] font-semibold border ${
-                                        isMissing
-                                          ? 'bg-red-50 dark:bg-red-500/5 border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400'
-                                          : 'bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                      }`}
-                                    >
-                                      {skill} {isMissing ? '✗' : '✓'}
-                                    </span>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
-
-                          {selectedJob.missing_skills.length > 0 && (
-                            <div>
-                              <span className="text-[9px] text-red-500 dark:text-red-400 font-semibold block mb-1.5">Gaps:</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {selectedJob.missing_skills.map((skill: string) => (
-                                  <span key={skill} className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400">
-                                    {skill}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Cover Letter */}
-                    <div className="flex-1 flex flex-col min-h-0">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Cover Letter</h4>
-                        {selectedJob.generated_cover_letter && selectedJob.status !== 'needs_profile' && (
-                          <button
-                            onClick={() => handleCopyCoverLetter(selectedJob.generated_cover_letter)}
-                            className="flex items-center gap-1 px-2 py-1 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 rounded-lg text-[9px] font-semibold text-neutral-600 dark:text-neutral-300 transition-all duration-150"
-                          >
-                            {copiedText ? (
-                              <><Check className="w-3 h-3 text-emerald-500" /> Copied</>
-                            ) : (
-                              <><Copy className="w-3 h-3" /> Copy</>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex-1 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-4 font-mono text-[10px] leading-relaxed text-neutral-600 dark:text-neutral-400 overflow-y-auto whitespace-pre-wrap min-h-[200px] transition-colors">
-                        {selectedJob.generated_cover_letter || 'No cover letter generated.'}
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6">
-                  <FileText className="w-8 h-8 text-neutral-300 dark:text-neutral-600 mb-3" />
-                  <p className="text-xs font-semibold text-neutral-500">No Role Selected</p>
-                  <p className="text-[10px] text-neutral-400 max-w-[220px] mt-1">Select a role from the pipeline to view match details and cover letter.</p>
-                </div>
-              )}
-            </div>
-
-          </section>
-        </main>
-      )}
+            ))}
+          </div>
+        </div>
+      </main>
 
       {/* ─── FOOTER ─── */}
-      <footer className="border-t border-neutral-200 dark:border-neutral-800 px-6 py-4 text-center flex-shrink-0 transition-colors">
-        <p className="text-[10px] text-neutral-400 font-medium">
-          PlacementOps · Autonomous Placement Agent
-        </p>
+      <footer className="border-t border-neutral-200 dark:border-neutral-800 px-6 py-4 text-center flex-shrink-0">
+        <p className="text-[10px] text-neutral-400 font-medium">PlacementOps · Autonomous Placement Agent</p>
       </footer>
     </div>
   );

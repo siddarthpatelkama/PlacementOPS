@@ -139,3 +139,115 @@ export async function fetchEmails(refreshToken, maxResults = 10) {
   
   return fetchedEmails;
 }
+
+/**
+ * Polls the Gmail inbox for all unread emails, extracts their content,
+ * marks each as read, and returns structured email objects.
+ *
+ * NOTE: This function requires the `gmail.modify` scope (or `gmail.readonly`
+ * if you remove the mark-as-read step). The OAuth consent flow in
+ * `getAuthUrl()` should request the appropriate scope.
+ *
+ * @param {string} refreshToken  The user's stored Google OAuth refresh token.
+ * @param {number} [maxResults=20]  Maximum number of unread emails to process.
+ * @returns {Promise<Array<{ messageId: string, sender: string, subject: string, body: string }>>}
+ */
+export async function pollJobEmails(refreshToken, maxResults = 20) {
+  if (!refreshToken) {
+    console.warn("[gmail] No refresh token provided — skipping poll.");
+    return [];
+  }
+
+  const oauth2Client = getOAuthClient();
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+  try {
+    /* ── Step 1: List unread messages ── */
+    const listResponse = await gmail.users.messages.list({
+      userId: "me",
+      q: "is:unread",
+      maxResults,
+    });
+
+    const messageRefs = listResponse.data.messages || [];
+
+    if (messageRefs.length === 0) {
+      console.log("[gmail] No unread messages found.");
+      return [];
+    }
+
+    console.log(`[gmail] Found ${messageRefs.length} unread message(s).`);
+
+    /* ── Step 2: Fetch, parse, and mark each message ── */
+    const processedEmails = [];
+
+    for (const ref of messageRefs) {
+      try {
+        // Fetch the full email payload
+        const emailResponse = await gmail.users.messages.get({
+          userId: "me",
+          id: ref.id,
+          format: "full",
+        });
+
+        const payload = emailResponse.data.payload;
+        const headers = payload?.headers || [];
+
+        // Extract Subject and From headers
+        const subject =
+          headers.find((h) => h.name.toLowerCase() === "subject")?.value ||
+          "(No Subject)";
+        const sender =
+          headers.find((h) => h.name.toLowerCase() === "from")?.value ||
+          "Unknown Sender";
+
+        // Decode the email body
+        const body = getEmailBody(payload);
+
+        // Mark the email as read
+        await gmail.users.messages.modify({
+          userId: "me",
+          id: ref.id,
+          requestBody: {
+            removeLabelIds: ["UNREAD"],
+          },
+        });
+
+        processedEmails.push({
+          messageId: ref.id,
+          sender,
+          subject,
+          body: body || emailResponse.data.snippet || "",
+        });
+      } catch (msgError) {
+        console.error(
+          `[gmail] Failed to process message ${ref.id}:`,
+          msgError.message
+        );
+        // Continue processing remaining messages
+      }
+    }
+
+    console.log(
+      `[gmail] Processed ${processedEmails.length}/${messageRefs.length} emails.`
+    );
+
+    return processedEmails;
+  } catch (error) {
+    if (error.code === 401 || error.message?.includes("invalid_grant")) {
+      console.error(
+        "[gmail] Invalid or expired refresh token. User must re-authenticate."
+      );
+    } else if (error.code === 403) {
+      console.error(
+        "[gmail] Insufficient permissions. Ensure gmail.modify scope is granted."
+      );
+    } else {
+      console.error("[gmail] Polling failed:", error.message);
+    }
+
+    return [];
+  }
+}

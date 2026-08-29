@@ -204,7 +204,7 @@ export default function DashboardPage() {
 
   const handleConnectGmail = () => {
     if (!session?.user) return;
-    window.location.href = `${BACKEND_URL}/api/auth/google?userId=${session.user.id}`;
+    window.location.href = `${BACKEND_URL}/api/gmail?userId=${session.user.id}`;
   };
 
   const getMatchScoreBadge = (score: number) => {

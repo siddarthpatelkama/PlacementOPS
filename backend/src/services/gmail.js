@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
-import dotenv from 'dotenv';
+import { supabaseAdmin } from '../db/supabase.js';
+import { runPlacementPipeline } from '../agents/graph.js';
 
 dotenv.config();
 
@@ -152,102 +153,87 @@ export async function fetchEmails(refreshToken, maxResults = 10) {
  * @param {number} [maxResults=20]  Maximum number of unread emails to process.
  * @returns {Promise<Array<{ messageId: string, sender: string, subject: string, body: string }>>}
  */
-export async function pollJobEmails(refreshToken, maxResults = 20) {
-  if (!refreshToken) {
-    console.warn("[gmail] No refresh token provided — skipping poll.");
-    return [];
-  }
-
-  const oauth2Client = getOAuthClient();
-  oauth2Client.setCredentials({ refresh_token: refreshToken });
-
-  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
+export async function pollJobEmails(maxResults = 20) {
   try {
-    /* ── Step 1: List unread messages ── */
-    const listResponse = await gmail.users.messages.list({
-      userId: "me",
-      q: "is:unread",
-      maxResults,
-    });
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('id, google_refresh_token')
+      .not('google_refresh_token', 'is', null);
 
-    const messageRefs = listResponse.data.messages || [];
-
-    if (messageRefs.length === 0) {
-      console.log("[gmail] No unread messages found.");
-      return [];
+    if (error) {
+      console.error('[gmail] Failed to fetch users from Supabase:', error.message);
+      return;
     }
 
-    console.log(`[gmail] Found ${messageRefs.length} unread message(s).`);
+    if (!users || users.length === 0) {
+      console.log('[gmail] No users with Gmail credentials found.');
+      return;
+    }
 
-    /* ── Step 2: Fetch, parse, and mark each message ── */
-    const processedEmails = [];
-
-    for (const ref of messageRefs) {
+    for (const user of users) {
+      const { id: userId, google_refresh_token: refreshToken } = user;
+      
       try {
-        // Fetch the full email payload
-        const emailResponse = await gmail.users.messages.get({
+        const oauth2Client = getOAuthClient();
+        oauth2Client.setCredentials({ refresh_token: refreshToken });
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+        const listResponse = await gmail.users.messages.list({
           userId: "me",
-          id: ref.id,
-          format: "full",
+          q: "is:unread",
+          maxResults,
         });
 
-        const payload = emailResponse.data.payload;
-        const headers = payload?.headers || [];
+        const messageRefs = listResponse.data.messages || [];
+        if (messageRefs.length === 0) continue;
 
-        // Extract Subject and From headers
-        const subject =
-          headers.find((h) => h.name.toLowerCase() === "subject")?.value ||
-          "(No Subject)";
-        const sender =
-          headers.find((h) => h.name.toLowerCase() === "from")?.value ||
-          "Unknown Sender";
+        console.log(`[gmail] Found ${messageRefs.length} unread message(s) for user ${userId}.`);
 
-        // Decode the email body
-        const body = getEmailBody(payload);
+        for (const ref of messageRefs) {
+          try {
+            const emailResponse = await gmail.users.messages.get({
+              userId: "me",
+              id: ref.id,
+              format: "full",
+            });
 
-        // Mark the email as read
-        await gmail.users.messages.modify({
-          userId: "me",
-          id: ref.id,
-          requestBody: {
-            removeLabelIds: ["UNREAD"],
-          },
-        });
+            const payload = emailResponse.data.payload;
+            const body = getEmailBody(payload);
+            const headers = payload?.headers || [];
+            const subject = headers.find((h) => h.name.toLowerCase() === "subject")?.value || "(No Subject)";
+            const sender = headers.find((h) => h.name.toLowerCase() === "from")?.value || "Unknown Sender";
 
-        processedEmails.push({
-          messageId: ref.id,
-          sender,
-          subject,
-          body: body || emailResponse.data.snippet || "",
-        });
-      } catch (msgError) {
-        console.error(
-          `[gmail] Failed to process message ${ref.id}:`,
-          msgError.message
-        );
-        // Continue processing remaining messages
+            await gmail.users.messages.modify({
+              userId: "me",
+              id: ref.id,
+              requestBody: { removeLabelIds: ["UNREAD"] },
+            });
+
+            const initialState = {
+              rawJd: body || emailResponse.data.snippet || "",
+              userId,
+            };
+
+            console.log(`[cron] ▶ Pipeline dispatched — Subject: "${subject}" | From: ${sender} | User: ${userId}`);
+            
+            runPlacementPipeline(initialState).catch((pipelineError) => {
+              console.error(`[cron] Pipeline failed for "${subject}":`, pipelineError.message);
+            });
+          } catch (msgError) {
+            console.error(`[gmail] Failed to process message ${ref.id} for user ${userId}:`, msgError.message);
+          }
+        }
+      } catch (userError) {
+        if (userError.code === 401 || userError.message?.includes("invalid_grant")) {
+          console.error(`[gmail] Invalid/expired refresh token for user ${userId}.`);
+        } else if (userError.code === 403) {
+          console.error(`[gmail] Insufficient permissions for user ${userId}.`);
+        } else {
+          console.error(`[gmail] Polling failed for user ${userId}:`, userError.message);
+        }
       }
     }
-
-    console.log(
-      `[gmail] Processed ${processedEmails.length}/${messageRefs.length} emails.`
-    );
-
-    return processedEmails;
-  } catch (error) {
-    if (error.code === 401 || error.message?.includes("invalid_grant")) {
-      console.error(
-        "[gmail] Invalid or expired refresh token. User must re-authenticate."
-      );
-    } else if (error.code === 403) {
-      console.error(
-        "[gmail] Insufficient permissions. Ensure gmail.modify scope is granted."
-      );
-    } else {
-      console.error("[gmail] Polling failed:", error.message);
-    }
-
-    return [];
+  } catch (err) {
+    console.error("[gmail] Global polling error:", err.message);
   }
 }

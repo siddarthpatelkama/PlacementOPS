@@ -22,6 +22,7 @@ import agentRouter from './routes/agent.js';
 import jobsRouter from './routes/jobs.js';
 import webhooksRouter from './routes/webhooks.js';
 import resumesRouter from './routes/resumes.js';
+import gmailAuthRouter from './routes/gmailAuth.js';
 
 // Pipeline imports
 import { pollJobEmails } from './services/gmail.js';
@@ -60,6 +61,7 @@ app.use('/api/agent', agentRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/resumes', resumesRouter);
+app.use('/api/gmail', gmailAuthRouter);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
@@ -79,38 +81,8 @@ cron.schedule('*/5 * * * *', async () => {
   console.log(`\n[cron] ── Polling cycle started at ${timestamp} ──`);
 
   try {
-    const emails = await pollJobEmails();
-
-    if (!emails || emails.length === 0) {
-      console.log('[cron] No new unread emails. Sleeping until next cycle.');
-      return;
-    }
-
-    console.log(`[cron] Received ${emails.length} unread email(s). Dispatching pipelines...`);
-
-    for (const email of emails) {
-      const initialState = {
-        rawJd: email.body,
-        userId: 'PLACEHOLDER_USER_ID',
-      };
-
-      console.log(
-        `[cron] ▶ Pipeline dispatched — Subject: "${email.subject}" | From: ${email.sender}`
-      );
-
-      // Fire-and-forget: pipelines run concurrently in the background.
-      // Errors are caught inside runPlacementPipeline and per-node handlers.
-      runPlacementPipeline(initialState).catch((pipelineError) => {
-        console.error(
-          `[cron] Pipeline failed for "${email.subject}":`,
-          pipelineError.message
-        );
-      });
-    }
-
-    console.log(`[cron] All ${emails.length} pipeline(s) dispatched.`);
+    await pollJobEmails();
   } catch (cronError) {
-    // Catch-all so the server never crashes from a polling failure
     console.error('[cron] Polling cycle failed:', cronError.message);
   }
 });

@@ -23,6 +23,7 @@ import jobsRouter from './routes/jobs.js';
 import webhooksRouter from './routes/webhooks.js';
 import resumesRouter from './routes/resumes.js';
 import gmailAuthRouter from './routes/gmailAuth.js';
+import sandboxRouter from './routes/sandbox.js';
 
 // Pipeline imports
 import { pollJobEmails } from './services/gmail.js';
@@ -62,6 +63,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/resumes', resumesRouter);
 app.use('/api/gmail', gmailAuthRouter);
+app.use('/api/sandbox', sandboxRouter);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

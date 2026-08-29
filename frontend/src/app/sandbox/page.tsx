@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Loader2, FileText, Upload, AlertCircle } from 'lucide-react';
 
 export default function SandboxPage() {
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [selectedFile, setselectedFile] = useState<File | null>(null);
   const [rawJd, setRawJd] = useState('');
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -17,7 +17,7 @@ export default function SandboxPage() {
   } | null>(null);
 
   const handleRunPipeline = async () => {
-    if (!resumeFile || !rawJd.trim()) {
+    if (!selectedFile || !rawJd.trim()) {
       setError('Please provide both a PDF resume and a Job Description.');
       return;
     }
@@ -27,7 +27,7 @@ export default function SandboxPage() {
     setResult(null);
 
     const formData = new FormData();
-    formData.append('resume', resumeFile);
+    formData.append('file', selectedFile);
     formData.append('rawJd', rawJd);
 
     try {
@@ -82,13 +82,13 @@ export default function SandboxPage() {
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-neutral-300 dark:border-neutral-700 rounded-xl cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6 text-neutral-500">
                   <Upload className="w-6 h-6 mb-2 text-neutral-400" />
-                  <p className="text-sm">{resumeFile ? resumeFile.name : 'Click to upload PDF'}</p>
+                  <p className="text-sm">{selectedFile ? selectedFile.name : 'Click to upload PDF'}</p>
                 </div>
                 <input 
                   type="file" 
                   className="hidden" 
                   accept=".pdf" 
-                  onChange={(e) => setResumeFile(e.target.files?.[0] || null)} 
+                  onChange={(e) => setselectedFile(e.target.files?.[0] || null)} 
                 />
               </label>
             </div>

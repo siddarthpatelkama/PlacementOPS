@@ -35,10 +35,7 @@ const PORT = process.env.PORT || 5000;
    ═══════════════════════════════════════════ */
 
 // Enable CORS for frontend dashboard requests
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+app.use(cors({ origin: process.env.FRONTEND_URL }));
 
 // Request logger middleware
 app.use(morgan('dev'));

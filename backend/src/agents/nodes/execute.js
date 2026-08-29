@@ -19,6 +19,7 @@ const llm = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
   temperature: 0.7,
   maxRetries: 2,
+  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
 });
 
 /** Match score threshold that determines cover letter strategy. */

@@ -13,6 +13,7 @@ import express from 'express';
 import multer from 'multer';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+global.DOMMatrix = global.DOMMatrix || class DOMMatrix {};
 const pdfParse = require('pdf-parse');
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { supabaseAdmin } from '../db/supabase.js';
@@ -35,6 +36,7 @@ const upload = multer({
 /** Gemini embedding model — 768-D vectors matching pgvector column. */
 const embeddings = new GoogleGenerativeAIEmbeddings({
   model: 'text-embedding-004',
+  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
 });
 
 /**

@@ -344,6 +344,19 @@ export default function DashboardPage() {
                 <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Vector Active</p>
+                  <p className="text-[10px] text-neutral-400">Ready for job matching</p>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 flex items-center gap-3 p-3 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl">
+                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-red-700 dark:text-red-400">No Resume</p>
+                  <p className="text-[10px] text-neutral-500">Upload your PDF to start matching</p>
+                </div>
+              </div>
+            )}
+            
             <div className="flex-1 min-h-0 overflow-y-auto">
               <ResumeUpload onUploadSuccess={() => { fetchStudentProfile(); fetchJobMatches(); }} />
             </div>

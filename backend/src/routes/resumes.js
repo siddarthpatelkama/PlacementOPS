@@ -11,7 +11,9 @@
 
 import express from 'express';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { supabaseAdmin } from '../db/supabase.js';
 

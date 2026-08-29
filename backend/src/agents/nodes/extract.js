@@ -32,18 +32,7 @@ const JobExtractionSchema = z.object({
     ),
 });
 
-/**
- * Instantiate Gemini 2.5 Flash with deterministic output for extraction.
- * Temperature 0 ensures consistent, reproducible parses across runs.
- */
-const llm = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash",
-  temperature: 0,
-  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-});
 
-/** LLM instance bound to the structured output schema. */
-const structuredLlm = llm.withStructuredOutput(JobExtractionSchema);
 
 /**
  * LangGraph node — extracts structured job data from raw JD text.
@@ -64,6 +53,14 @@ export const extractJobDetails = async (state) => {
       },
     };
   }
+
+  const llm = new ChatGoogleGenerativeAI({
+    model: "gemini-2.5-flash",
+    temperature: 0,
+    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  });
+  
+  const structuredLlm = llm.withStructuredOutput(JobExtractionSchema);
 
   try {
     const result = await structuredLlm.invoke([

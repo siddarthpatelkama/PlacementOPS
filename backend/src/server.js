@@ -9,13 +9,11 @@
  * @module server
  */
 
+import './init.js';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import cron from 'node-cron';
-
-dotenv.config();
 
 // Route imports
 import authRouter from './routes/auth.js';

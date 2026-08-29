@@ -33,11 +33,7 @@ const upload = multer({
   },
 });
 
-/** Gemini embedding model — 768-D vectors matching pgvector column. */
-const embeddings = new GoogleGenerativeAIEmbeddings({
-  model: 'text-embedding-004',
-  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-});
+
 
 /**
  * POST /api/resumes/upload
@@ -59,6 +55,11 @@ router.post('/upload', upload.single('resume'), async (req, res) => {
   if (!file) {
     return res.status(400).json({ success: false, error: 'A PDF file is required.' });
   }
+
+  const embeddings = new GoogleGenerativeAIEmbeddings({
+    model: 'text-embedding-004',
+    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  });
 
   try {
     /* ── Step 1: Extract raw text from PDF ── */

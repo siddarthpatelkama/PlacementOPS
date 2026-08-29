@@ -11,16 +11,7 @@
 
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
-/**
- * Gemini 2.5 Flash — slightly elevated temperature for natural,
- * human-sounding prose while still maintaining professionalism.
- */
-const llm = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash",
-  temperature: 0.7,
-  maxRetries: 2,
-  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-});
+
 
 /** Match score threshold that determines cover letter strategy. */
 const CONFIDENCE_THRESHOLD = 50;
@@ -93,6 +84,13 @@ function buildSystemPrompt(matchScore, companyName, role, missingSkills) {
  */
 export const draftApplication = async (state) => {
   const { extractedData, matchScore, missingSkills } = state;
+
+  const llm = new ChatGoogleGenerativeAI({
+    model: "gemini-2.5-flash",
+    temperature: 0.7,
+    maxRetries: 2,
+    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  });
 
   /* ── Guard: missing data ── */
   if (!extractedData) {

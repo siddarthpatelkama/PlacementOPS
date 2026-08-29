@@ -11,24 +11,10 @@
 
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin as supabase } from "../../db/supabase.js";
 import { z } from "zod";
 
-/**
- * Embedding model — Gemini text-embedding-004 produces 768-D vectors
- * that match the pgvector column dimension in Supabase.
- */
-const embeddings = new GoogleGenerativeAIEmbeddings({
-  model: "text-embedding-004",
-});
 
-/**
- * Chat model for skill-gap analysis — low temperature for consistency.
- */
-const llm = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash",
-  temperature: 0,
-});
 
 /**
  * Zod schema enforcing the LLM's structured output for missing skills.
@@ -43,17 +29,7 @@ const MissingSkillsSchema = z.object({
     ),
 });
 
-/** LLM instance bound to the missing-skills schema. */
-const structuredLlm = llm.withStructuredOutput(MissingSkillsSchema);
 
-/**
- * Initialise the Supabase admin client using the service-role key
- * so we can call RPC functions without row-level security restrictions.
- */
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 /**
  * LangGraph node — validates the student's resume against extracted JD skills.
@@ -71,6 +47,19 @@ const supabase = createClient(
  */
 export const validateResume = async (state) => {
   const { extractedData, userId } = state;
+
+  const embeddings = new GoogleGenerativeAIEmbeddings({
+    model: "text-embedding-004",
+    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  });
+
+  const llm = new ChatGoogleGenerativeAI({
+    model: "gemini-2.5-flash",
+    temperature: 0,
+    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  });
+
+  const structuredLlm = llm.withStructuredOutput(MissingSkillsSchema);
 
   if (!extractedData || !extractedData.skills || extractedData.skills.length === 0) {
     console.warn("[validate] No extracted skills — skipping validation.");
